@@ -11,7 +11,7 @@ import User from "./models/User.js";
 const app = express();
 const PORT = process.env.PORT || 4000;
 const JWT_SECRET = process.env.JWT_SECRET || "dev-secret-change-me";
-const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || "https://deft-jelly-68facf.netlify.app" || "http://localhost:5173";
+const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || "https://deft-jelly-68facf.netlify.app" || "http://localhost:5173" || "https://bloomcycle-bdy9-git-main-utkarshs-projects-74516499.vercel.app" || "https://*.netlify.app" || "https://*.vercel.app";
 
 app.use(
   cors({
