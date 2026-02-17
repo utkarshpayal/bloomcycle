@@ -11,15 +11,27 @@ import User from "./models/User.js";
 const app = express();
 const PORT = process.env.PORT || 4000;
 const JWT_SECRET = process.env.JWT_SECRET || "dev-secret-change-me";
-const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || "https://deft-jelly-68facf.netlify.app" || "http://localhost:5173" || "https://bloomcycle-bdy9-git-main-utkarshs-projects-74516499.vercel.app" || "https://*.netlify.app" || "https://*.vercel.app";
-
 app.use(
   cors({
-    origin: CLIENT_ORIGIN,
+    origin: function (origin, callback) {
+      if (!origin) return callback(null, true);
+
+      if (
+        origin === "http://localhost:5173" ||
+        origin.endsWith(".netlify.app") ||
+        origin.endsWith(".vercel.app")
+      ) {
+        return callback(null, true);
+      }
+
+      return callback(new Error("Not allowed by CORS"));
+    },
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"]
-  })
+    allowedHeaders: ["Content-Type", "Authorization"],
+  }),
 );
+
+app.options("*", cors());
 
 app.options("*", cors());
 
@@ -46,7 +58,10 @@ function applyAuthRateLimit(email, res) {
   const now = Date.now();
   const windowMs = 10 * 60 * 1000;
   const maxAttempts = 12;
-  const entry = authRateBucket.get(key) || { count: 0, resetAt: now + windowMs };
+  const entry = authRateBucket.get(key) || {
+    count: 0,
+    resetAt: now + windowMs,
+  };
 
   if (now > entry.resetAt) {
     authRateBucket.set(key, { count: 1, resetAt: now + windowMs });
@@ -57,7 +72,9 @@ function applyAuthRateLimit(email, res) {
   authRateBucket.set(key, entry);
 
   if (entry.count > maxAttempts) {
-    res.status(429).json({ message: "Too many attempts. Please try again later." });
+    res
+      .status(429)
+      .json({ message: "Too many attempts. Please try again later." });
     return true;
   }
 
@@ -78,7 +95,9 @@ function auth(req, res, next) {
 }
 
 function cleanText(value, max = 100) {
-  return String(value || "").trim().slice(0, max);
+  return String(value || "")
+    .trim()
+    .slice(0, max);
 }
 
 function normalizeEmail(email) {
@@ -105,7 +124,7 @@ function getCycleSummary(cycleLogs) {
   if (starts.length < 2) {
     return {
       averageCycleLength: null,
-      nextExpectedPeriod: null
+      nextExpectedPeriod: null,
     };
   }
 
@@ -114,8 +133,12 @@ function getCycleSummary(cycleLogs) {
     deltas.push(starts[i].diff(starts[i - 1], "day"));
   }
 
-  const averageCycleLength = Math.round(deltas.reduce((a, b) => a + b, 0) / deltas.length);
-  const nextExpectedPeriod = starts[starts.length - 1].add(averageCycleLength, "day").format("YYYY-MM-DD");
+  const averageCycleLength = Math.round(
+    deltas.reduce((a, b) => a + b, 0) / deltas.length,
+  );
+  const nextExpectedPeriod = starts[starts.length - 1]
+    .add(averageCycleLength, "day")
+    .format("YYYY-MM-DD");
 
   return { averageCycleLength, nextExpectedPeriod };
 }
@@ -139,7 +162,10 @@ function computeStreak(completedTasksByDate) {
 function getPublicUser(userDoc) {
   const completedTasksByDate = mapToObject(userDoc.completedTasksByDate);
   const taskDays = Object.keys(completedTasksByDate);
-  const totalCompletedTasks = taskDays.reduce((acc, date) => acc + (completedTasksByDate[date]?.length || 0), 0);
+  const totalCompletedTasks = taskDays.reduce(
+    (acc, date) => acc + (completedTasksByDate[date]?.length || 0),
+    0,
+  );
 
   return {
     id: userDoc.id,
@@ -149,7 +175,7 @@ function getPublicUser(userDoc) {
     rank: rankFromTrees(userDoc.trees),
     completedTasksByDate,
     totalCompletedTasks,
-    currentStreakDays: computeStreak(completedTasksByDate)
+    currentStreakDays: computeStreak(completedTasksByDate),
   };
 }
 
@@ -163,15 +189,21 @@ app.post("/api/auth/signup", async (req, res) => {
   const password = String(req.body.password || "");
 
   if (!name || !email || !password) {
-    return res.status(400).json({ message: "name, email, and password are required" });
+    return res
+      .status(400)
+      .json({ message: "name, email, and password are required" });
   }
 
   if (!email.includes("@") || email.length < 6) {
-    return res.status(400).json({ message: "Please provide a valid email address" });
+    return res
+      .status(400)
+      .json({ message: "Please provide a valid email address" });
   }
 
   if (password.length < 8) {
-    return res.status(400).json({ message: "Password must be at least 8 characters" });
+    return res
+      .status(400)
+      .json({ message: "Password must be at least 8 characters" });
   }
 
   if (applyAuthRateLimit(email, res)) return undefined;
@@ -191,10 +223,12 @@ app.post("/api/auth/signup", async (req, res) => {
     cycleLogs: [],
     completedTasksByDate: {},
     trees: 0,
-    createdAt: new Date().toISOString()
+    createdAt: new Date().toISOString(),
   });
 
-  const token = jwt.sign({ userId: newUser.id }, JWT_SECRET, { expiresIn: "7d" });
+  const token = jwt.sign({ userId: newUser.id }, JWT_SECRET, {
+    expiresIn: "7d",
+  });
   return res.status(201).json({ token, user: getPublicUser(newUser) });
 });
 
@@ -235,7 +269,7 @@ app.get("/api/leaderboard", async (_req, res) => {
   const leaderboard = users.map((user) => ({
     name: user.name,
     trees: user.trees,
-    rank: rankFromTrees(user.trees)
+    rank: rankFromTrees(user.trees),
   }));
 
   res.json({ leaderboard });
@@ -250,14 +284,19 @@ app.get("/api/tasks/daily", auth, async (req, res) => {
   const completed = user.completedTasksByDate.get(today) || [];
   return res.json({
     date: today,
-    tasks: dailyTasks.map((task) => ({ ...task, completed: completed.includes(task.id) }))
+    tasks: dailyTasks.map((task) => ({
+      ...task,
+      completed: completed.includes(task.id),
+    })),
   });
 });
 
 app.post("/api/tasks/complete", auth, async (req, res) => {
   const taskId = cleanText(req.body.taskId, 50);
   const maybeDate = cleanText(req.body.date, 20);
-  const normalizedDate = isValidDate(maybeDate) ? maybeDate : dayjs().format("YYYY-MM-DD");
+  const normalizedDate = isValidDate(maybeDate)
+    ? maybeDate
+    : dayjs().format("YYYY-MM-DD");
 
   if (!taskId) {
     return res.status(400).json({ message: "taskId is required" });
@@ -285,12 +324,17 @@ app.post("/api/tasks/complete", auth, async (req, res) => {
 
 app.post("/api/cycle/log", auth, async (req, res) => {
   const maybeDate = cleanText(req.body.date, 20);
-  const normalizedDate = isValidDate(maybeDate) ? maybeDate : dayjs().format("YYYY-MM-DD");
+  const normalizedDate = isValidDate(maybeDate)
+    ? maybeDate
+    : dayjs().format("YYYY-MM-DD");
   const flow = cleanText(req.body.flow, 20) || "unknown";
   const mood = cleanText(req.body.mood, 30) || "neutral";
   const isPeriodStart = Boolean(req.body.isPeriodStart);
   const symptoms = Array.isArray(req.body.symptoms)
-    ? req.body.symptoms.map((value) => cleanText(value, 20)).filter(Boolean).slice(0, 8)
+    ? req.body.symptoms
+        .map((value) => cleanText(value, 20))
+        .filter(Boolean)
+        .slice(0, 8)
     : [];
 
   const user = await User.findOne({ id: req.userId });
@@ -298,7 +342,9 @@ app.post("/api/cycle/log", auth, async (req, res) => {
     return res.status(404).json({ message: "User not found" });
   }
 
-  const existingIdx = user.cycleLogs.findIndex((l) => l.date === normalizedDate);
+  const existingIdx = user.cycleLogs.findIndex(
+    (l) => l.date === normalizedDate,
+  );
   const entry = { date: normalizedDate, flow, symptoms, mood, isPeriodStart };
 
   if (existingIdx === -1) {
@@ -335,8 +381,8 @@ app.get("/api/profile", auth, async (req, res) => {
   return res.json({
     profile: {
       ...getPublicUser(user),
-      cycleSummary: summary
-    }
+      cycleSummary: summary,
+    },
   });
 });
 
